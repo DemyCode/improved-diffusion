@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "improved-diffusion"
+version = "0.1.0"
+description = ""
+authors = ["DemyCode <verycols@gmail.com>"]
+readme = "README.md"
+packages = [{include = "improved_diffusion"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+blobfile = ">=1.0.5"
+torch = "^2.3.0"
+tqdm = "^4.66.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
