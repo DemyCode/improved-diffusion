@@ -454,15 +454,7 @@ class UNetModel(nn.Module):
         """
         return next(self.input_blocks.parameters()).dtype
 
-    def forward(self, x, timesteps, y=None):
-        """
-        Apply the model to an input batch.
-
-        :param x: an [N x C x ...] Tensor of inputs.
-        :param timesteps: a 1-D batch of timesteps.
-        :param y: an [N] Tensor of labels, if class-conditional.
-        :return: an [N x C x ...] Tensor of outputs.
-        """
+    def encode(self, x, timesteps, y=None):
         assert (y is not None) == (
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
@@ -479,12 +471,36 @@ class UNetModel(nn.Module):
             h = module(h, emb)
             hs.append(h)
         h = self.middle_block(h, emb)
-        middle_layer = h.clone()
+        return h, hs
+    
+    def decode(self, h, hs, original_dtype, timesteps, y=None):
+        assert (y is not None) == (
+            self.num_classes is not None
+        ), "must specify y if and only if the model is class-conditional"
+
+        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
+
+        if self.num_classes is not None:
+            assert y.shape == (h.shape[0],)
+            emb = emb + self.label_emb(y)
+
         for module in self.output_blocks:
             cat_in = th.cat([h, hs.pop()], dim=1)
             h = module(cat_in, emb)
-        h = h.type(x.dtype)
-        return self.out(h), middle_layer
+        h = h.type(original_dtype)
+        return self.out(h)
+    
+    def forward(self, x, timesteps, y=None):
+        """
+        Apply the model to an input batch.
+
+        :param x: an [N x C x ...] Tensor of inputs.
+        :param timesteps: a 1-D batch of timesteps.
+        :param y: an [N] Tensor of labels, if class-conditional
+        :return: an [N x C x ...] Tensor of outputs.
+        """
+        h, hs = self.encode(x, timesteps, y)
+        return self.decode(h, hs, x.dtype, timesteps, y)
 
     def get_feature_vectors(self, x, timesteps, y=None):
         """
