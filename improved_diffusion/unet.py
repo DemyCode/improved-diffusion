@@ -192,6 +192,61 @@ class ResBlock(TimestepBlock):
         return self.skip_connection(x) + h
 
 
+class ClassicResBlock(nn.Module):
+    def __init__(
+        self,
+        channels,
+        dropout,
+        out_channels=None,
+        use_conv=False,
+        dims=2,
+        use_checkpoint=False,
+    ):
+        super().__init__()
+        self.channels = channels
+        self.dropout = dropout
+        self.out_channels = out_channels or channels
+        self.use_conv = use_conv
+        self.use_checkpoint = use_checkpoint
+
+        self.in_layers = nn.Sequential(
+            normalization(channels),
+            SiLU(),
+            conv_nd(dims, channels, self.out_channels, 3, padding=1),
+        )
+        self.out_layers = nn.Sequential(
+            normalization(self.out_channels),
+            SiLU(),
+            nn.Dropout(p=dropout),
+            zero_module(
+                conv_nd(dims, self.out_channels, self.out_channels, 3, padding=1)
+            ),
+        )
+
+        if self.out_channels == channels:
+            self.skip_connection = nn.Identity()
+        elif use_conv:
+            self.skip_connection = conv_nd(
+                dims, channels, self.out_channels, 3, padding=1
+            )
+        else:
+            self.skip_connection = conv_nd(dims, channels, self.out_channels, 1)
+
+    def forward(self, x):
+        """
+        Apply the block to a Tensor, conditioned on a timestep embedding.
+
+        :param x: an [N x C x ...] Tensor of features.
+        :param emb: an [N x emb_channels] Tensor of timestep embeddings.
+        :return: an [N x C x ...] Tensor of outputs.
+        """
+        return checkpoint(self._forward, (x,), self.parameters(), self.use_checkpoint)
+
+    def _forward(self, x):
+        h = self.in_layers(x)
+        h = self.out_layers(h)
+        return self.skip_connection(x) + h
+
 class AttentionBlock(nn.Module):
     """
     An attention block that allows spatial positions to attend to each other.
