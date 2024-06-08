@@ -454,7 +454,15 @@ class UNetModel(nn.Module):
         """
         return next(self.input_blocks.parameters()).dtype
 
-    def encode(self, x, timesteps, y=None):
+    def forward(self, x, timesteps, y=None):
+        """
+        Apply the model to an input batch.
+
+        :param x: an [N x C x ...] Tensor of inputs.
+        :param timesteps: a 1-D batch of timesteps.
+        :param y: an [N] Tensor of labels, if class-conditional.
+        :return: an [N x C x ...] Tensor of outputs.
+        """
         assert (y is not None) == (
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
@@ -471,30 +479,11 @@ class UNetModel(nn.Module):
             h = module(h, emb)
             hs.append(h)
         h = self.middle_block(h, emb)
-        return h, hs, emb
-
-    def decode(self, h, hs, emb, original_dtype, timesteps, y=None):
-        assert (y is not None) == (
-            self.num_classes is not None
-        ), "must specify y if and only if the model is class-conditional"
-
         for module in self.output_blocks:
             cat_in = th.cat([h, hs.pop()], dim=1)
             h = module(cat_in, emb)
-        h = h.type(original_dtype)
+        h = h.type(x.dtype)
         return self.out(h)
-
-    def forward(self, x, timesteps, y=None):
-        """
-        Apply the model to an input batch.
-
-        :param x: an [N x C x ...] Tensor of inputs.
-        :param timesteps: a 1-D batch of timesteps.
-        :param y: an [N] Tensor of labels, if class-conditional
-        :return: an [N x C x ...] Tensor of outputs.
-        """
-        h, hs = self.encode(x, timesteps, y)
-        return self.decode(h, hs, x.dtype, timesteps, y)
 
     def get_feature_vectors(self, x, timesteps, y=None):
         """
